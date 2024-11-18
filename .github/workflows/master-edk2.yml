@@ -15,39 +15,50 @@ jobs:
           - IA32
           - X64
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: 'recursive'
       - name: Clone edk2
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           repository: tianocore/edk2
           submodules: 'recursive'
-          ref: edk2-stable202105
+          ref: fff6d81270b57ee786ea18ad74f43149b9f03494
           path: edk2
       - name: Install requires packages
         run: |
           sudo apt update
-          sudo apt install --yes --no-install-recommends build-essential uuid-dev iasl nasm gcc-aarch64-linux-gnu gcc-arm-none-eabi gcc-i686-linux-gnu gettext python make
+          sudo apt install --yes --no-install-recommends build-essential uuid-dev iasl nasm gcc-aarch64-linux-gnu gcc-arm-none-eabi gcc-i686-linux-gnu gettext
       - name: Build for ${{matrix.arch}}
-        run: bash scripts/build-edk2.sh ${{matrix.arch}}
-      - name: Upload Artifact SimpleInit-${{matrix.arch}}.efi
-        uses: actions/upload-artifact@v2
+        run: |
+          bash scripts/build-edk2.sh ${{matrix.arch}}
+          mkdir artifacts
+          cp build-edk2/Build/SimpleInit/RELEASE_GCC5/${{matrix.arch}}/SimpleInitMain.efi artifacts/SimpleInit-${{matrix.arch}}.efi
+          cp build-edk2/Build/SimpleInit/RELEASE_GCC5/${{matrix.arch}}/SimpleInitMain.debug artifacts/SimpleInit-${{matrix.arch}}.debug
+          cp build-edk2/Build/SimpleInit/RELEASE_GCC5/${{matrix.arch}}/KernelFdtDxe.efi artifacts/KernelFdtDxe-${{matrix.arch}}.efi
+          cp build-edk2/Build/SimpleInit/RELEASE_GCC5/${{matrix.arch}}/KernelFdtDxe.debug artifacts/KernelFdtDxe-${{matrix.arch}}.debug
+      - name: Upload artifacts for ${{matrix.arch}}
+        uses: actions/upload-artifact@v4
         with:
-          name: SimpleInit-${{matrix.arch}}.efi
-          path: build-edk2/Build/SimpleInit/RELEASE_GCC5/${{matrix.arch}}/SimpleInitMain.efi
-      - name: Upload Artifact SimpleInit-${{matrix.arch}}.debug
-        uses: actions/upload-artifact@v2
+          name: ${{matrix.arch}}
+          path: artifacts/*
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - id: time
+        uses: boredland/get-time-action@2.0.0
         with:
-          name: SimpleInit-${{matrix.arch}}.debug
-          path: build-edk2/Build/SimpleInit/RELEASE_GCC5/${{matrix.arch}}/SimpleInitMain.debug
-      - name: Upload Artifact KernelFdtDxe-${{matrix.arch}}.efi
-        uses: actions/upload-artifact@v2
+          format: 'YYYYMMDD'
+      - uses: actions/download-artifact@v4
         with:
-          name: KernelFdtDxe-${{matrix.arch}}.efi
-          path: build-edk2/Build/SimpleInit/RELEASE_GCC5/${{matrix.arch}}/KernelFdtDxe.efi
-      - name: Upload Artifact KernelFdtDxe-${{matrix.arch}}.debug
-        uses: actions/upload-artifact@v2
+          merge-multiple: true
+          path: ${{ github.workspace }}/artifacts
+      - uses: ncipollo/release-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: KernelFdtDxe-${{matrix.arch}}.debug
-          path: build-edk2/Build/SimpleInit/RELEASE_GCC5/${{matrix.arch}}/KernelFdtDxe.debug
+          tag: ${{ steps.time.outputs.time }}
+          name: UEFI Binaries (${{ steps.time.outputs.time }})
+          draft: false
+          artifacts: artifacts/*
