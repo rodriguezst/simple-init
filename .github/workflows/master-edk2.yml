@@ -43,6 +43,7 @@ jobs:
           name: ${{matrix.arch}}
           path: artifacts/*
   release:
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     needs: build
     steps:
