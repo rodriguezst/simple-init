@@ -30,6 +30,18 @@ do	[ -f "${i}" ]||continue
 	mkdir -p "${_path}"
 	msgfmt -o "${_path}/simple-init.mo" "${i}"
 done
+# Generate certificates for Secure Boot
+openssl req -new -x509 -newkey rsa:2048 -keyout MOK.key -out MOK.crt \
+  -nodes -days 3650 -subj "/CN=simple-init/"
+# Function to sign EFI binaries using sbsign and the generated certificates
+sign_efi()
+{
+	local ARCH="$1"
+	local FILENAME="${WORKSPACE}/Build/SimpleInit/${TARGET}_${TOOLCHAIN}/${ARCH}/SimpleInitMain.efi"
+	objcopy --set-section-alignment '.sbat=512' --add-section .sbat=sbat.csv \
+   		--adjust-section-vma .sbat+10000000 "${FILENAME}"
+	sbsign --key MOK.key --cert MOK.crt "${FILENAME}"
+}
 make -C "${EDK2}"/BaseTools
 case "$_ARG1" in
 	ia32|IA32)
@@ -38,6 +50,7 @@ case "$_ARG1" in
 		export GCC5_BIN="${CROSS_COMPILE}"
 		bash scripts/gen-rootfs-source.sh "${SIMPLE_INIT}" "${BUILD}" "${SIMPLE_INIT}"/root
 		build -p SimpleInit.dsc -t "${TOOLCHAIN}" -a IA32 -b "${TARGET}"
+		sign_efi IA32
 	;;
 	x64|X64)
 		export CROSS_COMPILE=x86_64-linux-gnu-
@@ -45,6 +58,7 @@ case "$_ARG1" in
 		export GCC5_BIN="${CROSS_COMPILE}"
 		bash scripts/gen-rootfs-source.sh "${SIMPLE_INIT}" "${BUILD}" "${SIMPLE_INIT}"/root
 		build -p SimpleInit.dsc -t "${TOOLCHAIN}" -a X64 -b "${TARGET}"
+		sign_efi X64
 	;;
 	arm|ARM)
 		export CROSS_COMPILE=arm-none-eabi-
@@ -52,6 +66,7 @@ case "$_ARG1" in
 		export GCC5_BIN="${CROSS_COMPILE}"
 		bash scripts/gen-rootfs-source.sh "${SIMPLE_INIT}" "${BUILD}" "${SIMPLE_INIT}"/root
 		build -p SimpleInit.dsc -t "${TOOLCHAIN}" -a ARM -b "${TARGET}"
+		sign_efi ARM
 	;;
 	aarch64|AARCH64)
 		export CROSS_COMPILE=aarch64-linux-gnu-
@@ -59,6 +74,7 @@ case "$_ARG1" in
 		export GCC5_BIN="${CROSS_COMPILE}"
 		bash scripts/gen-rootfs-source.sh "${SIMPLE_INIT}" "${BUILD}" "${SIMPLE_INIT}"/root
 		build -p SimpleInit.dsc -t "${TOOLCHAIN}" -a AARCH64 -b "${TARGET}"
+		sign_efi AARCH64
 	;;
 	all)
 		bash "${0}" ia32
@@ -84,3 +100,4 @@ case "$_ARG1" in
 	;;
 esac
 popd >/dev/null
+
